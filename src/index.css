@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Cinzel', Georgia, serif;
+    --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #0b0a08;
+    color: #efe6d5;
+    font-family: var(--font-body);
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom subtle scrollbars for readable modal/spread panels */
+.scroll-parchment::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-parchment::-webkit-scrollbar-track {
+  background: rgba(20, 17, 13, 0.5);
+}
+.scroll-parchment::-webkit-scrollbar-thumb {
+  background: rgba(200, 150, 74, 0.45);
+  border-radius: 3px;
+}
