@@ -129,7 +129,7 @@ export const FlightHud: React.FC<FlightHudProps> = ({
         </>
       )}
       {/* Top Perimeter Row: Compact Telemetry Cluster + Utility Controls */}
-      <div className="flex items-start justify-between gap-2 sm:gap-3">
+      <div className="flex items-start justify-between gap-2.5 sm:gap-3">
         {/* Top-Left: World-Matched Flight Instruments & Objective */}
         <div className="pointer-events-auto min-w-0 flex-1 max-w-md rounded border border-[#c8964a]/35 bg-[#130f0b]/85 px-2.5 py-2 sm:px-3.5 sm:py-2.5 space-y-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] sm:text-[11px] font-mono-tabular uppercase tracking-wider text-[#c8964a]">
@@ -158,7 +158,7 @@ export const FlightHud: React.FC<FlightHudProps> = ({
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs font-mono-tabular text-[#cbb899]">
+          <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 pt-1 text-xs font-mono-tabular text-[#cbb899]">
             <span>
               {ui.altLabel} <strong className="text-[#f7ebd4]">{hud.altitude}m</strong>
             </span>
@@ -192,7 +192,7 @@ export const FlightHud: React.FC<FlightHudProps> = ({
         </div>
 
         {/* Top-Right: Compact Square Utility Controls (Mute, Reset Cam [C], Restart [R], Fullscreen, Pause [Esc]) */}
-        <div className="pointer-events-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
+        <div className="pointer-events-auto flex flex-wrap sm:flex-nowrap justify-end max-w-[7.2rem] sm:max-w-none items-center gap-1 sm:gap-1.5 shrink-0">
           <button
             type="button"
             tabIndex={-1}

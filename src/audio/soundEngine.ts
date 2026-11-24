@@ -9,6 +9,19 @@ export type MusicTheme =
   | 'silence_horus'
   | 'hook';
 
+type BgmTrackId = 'necropolis' | 'seth';
+
+const TRACK_URLS: Record<BgmTrackId, string> = {
+  necropolis: '/audio/descent-into-the-necropolis.ogg',
+  seth: '/audio/seth-god-of-egypt.ogg',
+};
+
+function themeToTrack(theme: MusicTheme): BgmTrackId | null {
+  if (theme === 'silence_horus') return null;
+  if (theme === 'boss_set') return 'seth';
+  return 'necropolis';
+}
+
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -21,11 +34,70 @@ class SoundEngine {
   private windSource: AudioBufferSourceNode | null = null;
   private windGain: GainNode | null = null;
   private noteTimer: number | null = null;
+
+  private audioTracks: Partial<Record<BgmTrackId, HTMLAudioElement>> = {};
+  private activeTrackId: BgmTrackId | null = null;
+  private bgmPlaying = false;
+  private unlocked = false;
+
   private currentTheme: MusicTheme = 'menu';
   private musicVolume = 0.65;
   private sfxVolume = 0.8;
   private muted = false;
   private stepIndex = 0;
+
+  private ensureAudioTrack(trackId: BgmTrackId): HTMLAudioElement | null {
+    if (typeof window === 'undefined' || typeof Audio === 'undefined') return null;
+    let el = this.audioTracks[trackId];
+    if (!el) {
+      el = new Audio(TRACK_URLS[trackId]);
+      el.loop = true;
+      el.preload = 'auto';
+      el.volume = this.muted ? 0 : this.musicVolume * 0.78;
+      this.audioTracks[trackId] = el;
+    }
+    return el;
+  }
+
+  private syncBgmTrack(): void {
+    const targetTrack = themeToTrack(this.currentTheme);
+
+    // Pause any non-target track cleanly
+    (['necropolis', 'seth'] as BgmTrackId[]).forEach((id) => {
+      const el = this.audioTracks[id];
+      if (el && id !== targetTrack && !el.paused) {
+        el.pause();
+        if (this.currentTheme === 'silence_horus') {
+          // Hold dramatic silence in Set Phase 3
+          el.volume = 0;
+        }
+      }
+    });
+
+    this.activeTrackId = targetTrack;
+    if (!targetTrack) {
+      this.bgmPlaying = false;
+      return;
+    }
+
+    const activeEl = this.ensureAudioTrack(targetTrack);
+    if (!activeEl) return;
+
+    activeEl.volume = this.muted ? 0 : this.musicVolume * 0.78;
+
+    if (this.unlocked && !this.muted && activeEl.paused) {
+      activeEl
+        .play()
+        .then(() => {
+          this.bgmPlaying = true;
+        })
+        .catch(() => {
+          this.bgmPlaying = false;
+        });
+    } else if (!activeEl.paused) {
+      this.bgmPlaying = true;
+    }
+  }
 
   private ensureContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -63,15 +135,15 @@ class SoundEngine {
     this.filterNode.frequency.value = 420;
 
     this.droneGain = this.ctx.createGain();
-    this.droneGain.gain.value = 0.16;
+    this.droneGain.gain.value = 0.08;
 
     this.droneOsc1 = this.ctx.createOscillator();
     this.droneOsc1.type = 'triangle';
-    this.droneOsc1.frequency.value = 73.42; // D2
+    this.droneOsc1.frequency.value = 73.42;
 
     this.droneOsc2 = this.ctx.createOscillator();
     this.droneOsc2.type = 'sine';
-    this.droneOsc2.frequency.value = 110.0; // A2
+    this.droneOsc2.frequency.value = 110.0;
 
     this.droneOsc1.connect(this.filterNode);
     this.droneOsc2.connect(this.filterNode);
@@ -119,15 +191,16 @@ class SoundEngine {
     }
     this.noteTimer = window.setInterval(() => {
       if (!this.ctx || this.ctx.state !== 'running' || this.muted) return;
+      // Avoid clashing with active OGG soundtrack once loaded & playing
+      if (this.bgmPlaying) return;
       this.playThemeStep();
     }, 950);
   }
 
   private playThemeStep(): void {
     if (!this.ctx || !this.musicGain) return;
-    if (this.currentTheme === 'silence_horus') return; // Sacred silence during Set Phase 3
+    if (this.currentTheme === 'silence_horus') return;
 
-    // Phrygian dominant & Hijaz-inspired Egyptian scales
     const scales: Record<MusicTheme, number[]> = {
       menu: [146.83, 155.56, 185.0, 196.0, 220.0, 233.08, 293.66],
       excavation: [146.83, 174.61, 196.0, 220.0, 261.63],
@@ -143,7 +216,6 @@ class SoundEngine {
     const notes = scales[this.currentTheme] ?? scales.menu;
     this.stepIndex = (this.stepIndex + 1) % 16;
 
-    // Sparse, meditative phrasing (not cluttered)
     if (this.stepIndex % 2 !== 0 && this.currentTheme !== 'memphis' && this.currentTheme !== 'boss_set') {
       return;
     }
@@ -165,7 +237,7 @@ class SoundEngine {
     filter.type = 'lowpass';
     filter.frequency.value = this.currentTheme === 'boss_set' ? 680 : 1250;
 
-    const peak = this.currentTheme === 'boss_set' ? 0.12 : 0.085;
+    const peak = this.currentTheme === 'boss_set' ? 0.1 : 0.065;
     env.gain.setValueAtTime(0.0001, now);
     env.gain.exponentialRampToValueAtTime(peak, now + 0.08);
     env.gain.exponentialRampToValueAtTime(0.0001, now + 1.45);
@@ -176,30 +248,22 @@ class SoundEngine {
 
     osc.start(now);
     osc.stop(now + 1.5);
-
-    // Frame drum pulse in Memphis & Set boss
-    if ((this.currentTheme === 'memphis' || this.currentTheme === 'boss_set') && this.stepIndex % 2 === 0) {
-      const drumOsc = this.ctx.createOscillator();
-      const drumEnv = this.ctx.createGain();
-      drumOsc.type = 'sine';
-      drumOsc.frequency.setValueAtTime(this.currentTheme === 'boss_set' ? 88 : 112, now);
-      drumOsc.frequency.exponentialRampToValueAtTime(42, now + 0.16);
-      drumEnv.gain.setValueAtTime(0.16, now);
-      drumEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-      drumOsc.connect(drumEnv);
-      drumEnv.connect(this.musicGain);
-      drumOsc.start(now);
-      drumOsc.stop(now + 0.24);
-    }
   }
 
   public unlock(): void {
+    this.unlocked = true;
     this.ensureContext();
+    this.syncBgmTrack();
   }
 
   public setTheme(theme: MusicTheme): void {
-    if (this.currentTheme === theme) return;
+    if (this.currentTheme === theme) {
+      this.syncBgmTrack();
+      return;
+    }
     this.currentTheme = theme;
+    this.syncBgmTrack();
+
     const ctx = this.ctx;
     if (!ctx || !this.droneOsc1 || !this.droneOsc2 || !this.droneGain || !this.filterNode || !this.windGain) {
       return;
@@ -207,21 +271,21 @@ class SoundEngine {
 
     const now = ctx.currentTime;
     const baseFreqs: Record<MusicTheme, [number, number, number, number]> = {
-      menu: [73.42, 110.0, 0.16, 0.08],
-      excavation: [65.41, 98.0, 0.13, 0.09],
-      workshop: [65.41, 110.0, 0.11, 0.05],
-      flight_dawn: [73.42, 146.83, 0.15, 0.14],
-      portal_duat: [82.41, 164.81, 0.18, 0.04],
-      memphis: [73.42, 110.0, 0.17, 0.12],
-      boss_set: [55.0, 82.41, 0.24, 0.24],
-      silence_horus: [73.42, 146.83, 0.02, 0.01],
-      hook: [73.42, 110.0, 0.12, 0.04],
+      menu: [73.42, 110.0, 0.05, 0.07],
+      excavation: [65.41, 98.0, 0.04, 0.08],
+      workshop: [65.41, 110.0, 0.03, 0.04],
+      flight_dawn: [73.42, 146.83, 0.04, 0.12],
+      portal_duat: [82.41, 164.81, 0.05, 0.04],
+      memphis: [73.42, 110.0, 0.04, 0.1],
+      boss_set: [55.0, 82.41, 0.06, 0.22],
+      silence_horus: [73.42, 146.83, 0.005, 0.005],
+      hook: [73.42, 110.0, 0.04, 0.04],
     };
 
     const [f1, f2, dg, wg] = baseFreqs[theme];
     this.droneOsc1.frequency.setTargetAtTime(f1, now, 0.45);
     this.droneOsc2.frequency.setTargetAtTime(f2, now, 0.45);
-    this.droneGain.gain.setTargetAtTime(dg, now, 0.5);
+    this.droneGain.gain.setTargetAtTime(this.bgmPlaying ? dg * 0.4 : dg, now, 0.5);
     this.windGain.gain.setTargetAtTime(wg, now, 0.5);
   }
 
@@ -232,6 +296,12 @@ class SoundEngine {
       this.musicGain.gain.setTargetAtTime(music * 0.45, this.ctx.currentTime, 0.08);
       this.sfxGain.gain.setTargetAtTime(sfx * 0.65, this.ctx.currentTime, 0.08);
     }
+    if (this.activeTrackId) {
+      const activeEl = this.audioTracks[this.activeTrackId];
+      if (activeEl) {
+        activeEl.volume = this.muted ? 0 : this.musicVolume * 0.78;
+      }
+    }
   }
 
   public setMuted(muted: boolean): void {
@@ -239,6 +309,23 @@ class SoundEngine {
     if (this.ctx && this.masterGain) {
       this.masterGain.gain.setTargetAtTime(muted ? 0 : 1, this.ctx.currentTime, 0.05);
     }
+    (['necropolis', 'seth'] as BgmTrackId[]).forEach((id) => {
+      const el = this.audioTracks[id];
+      if (!el) return;
+      if (muted) {
+        el.volume = 0;
+        if (!el.paused) el.pause();
+      } else if (id === this.activeTrackId) {
+        el.volume = this.musicVolume * 0.78;
+        if (this.unlocked) {
+          el.play()
+            .then(() => {
+              this.bgmPlaying = true;
+            })
+            .catch(() => {});
+        }
+      }
+    });
   }
 
   public playUiHover(): void {
@@ -261,7 +348,6 @@ class SoundEngine {
     const ctx = this.ensureContext();
     if (!ctx || !this.sfxGain || this.muted) return;
     const now = ctx.currentTime;
-    // Sycamore wood tap + bronze overtone
     const osc = ctx.createOscillator();
     const env = ctx.createGain();
     osc.type = 'triangle';
@@ -368,6 +454,14 @@ class SoundEngine {
       window.clearInterval(this.noteTimer);
       this.noteTimer = null;
     }
+    (['necropolis', 'seth'] as BgmTrackId[]).forEach((id) => {
+      const el = this.audioTracks[id];
+      if (el) {
+        el.pause();
+        el.src = '';
+      }
+    });
+    this.audioTracks = {};
     if (this.ctx) {
       this.ctx.close().catch(() => {});
       this.ctx = null;

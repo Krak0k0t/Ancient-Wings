@@ -645,8 +645,17 @@ export class FlightEngine {
   }
 
   private updateFrame(dt: number, rawDt: number): void {
-    const isDuat = this.mode === 'flight' && this.sceneId === '1_5';
-    this.nature.update(this.elapsed, dt, this.quality, isDuat);
+    const atmosphere: 'dawn' | 'duat' | 'memphis' | 'set' =
+      this.mode === 'flight'
+        ? this.sceneId === '1_5'
+          ? 'duat'
+          : this.sceneId === '1_6'
+            ? 'memphis'
+            : this.sceneId === '1_7'
+              ? 'set'
+              : 'dawn'
+        : 'dawn';
+    this.nature.update(this.elapsed, dt, this.quality, atmosphere);
     this.arch.update(this.elapsed);
 
     if (this.mode === 'menu' || this.mode === 'static_backdrop') {
